@@ -15,12 +15,34 @@ constexpr float transparent[] = { 0.0, 0.0, 0.0, 0.0 };
 
 std::array<double, 3> light_position = { 0, 1, -30 };
 
+class Environment
+{
+    std::array<double, 3> eye;
+    std::array<double, 3> center;
+    std::array<double, 3> up;
+    
+    std::array<double, 3> H;
+
+    std::array<double, 3> light_position;
+    std::array<float, 4> light_color;
+    void calcH();
+public:
+    Environment();
+    void lookAt(std::array<double, 3> const& eye, std::array<double, 3> const& center, std::array<double, 3> const& up);
+    void setLightPosition(std::array<double, 3> const& light_position);
+    void setLightColor(std::array<float, 4> const& light_color);
+    void calcSpecular(std::array<float, 4> const& material, std::array<double, 3> const& normal, double smoothness, std::array<float, 4>& output_specular);
+    void apply();
+};
+
+Environment* env;
+
 class MassPoint
 {
 public:
     double height;
     double velocity;
-    static constexpr double RESISTANCE = 0.005;
+    static constexpr double RESISTANCE = 0.03;
     static constexpr double GRAVITY = 0.001;
 public:
     MassPoint(double y = 0, double v = 0)
@@ -44,7 +66,7 @@ public:
 };
 
 struct Params {
-    float p[4];
+    std::array<float, 4> p;
     Params() = default;
     Params(float r, float g, float b, float a) {
 		p[0] = r;
@@ -71,7 +93,8 @@ struct Params {
         p[3] = a;
         return *this;
     }
-    operator float* () { return p; }
+    operator float* () { return p.data(); }
+    operator std::array<float, 4>& () { return p; }
 };
 
 struct Material {
@@ -166,7 +189,7 @@ public:
         
         for (size_t i = 1; i < points.size() - 1; i++) {
             for (size_t j = 1; j < points[0].size() - 1; j++) {
-                normals[i][j][0] = points[i - 1][j]->height - points[i + 1][j]->height;
+                normals[i][j][0] = points[i + 1][j]->height - points[i - 1][j]->height;
                 normals[i][j][2] = points[i][j - 1]->height - points[i][j + 1]->height;
             }
         }
@@ -175,40 +198,40 @@ public:
         size_t last_y = points[0].size() - 1;
 
         for (size_t i = 1; i < points.size() - 1; i++) {
-            normals[i][0][0] = points[i - 1][0]->height - points[i + 1][0]->height;
+            normals[i][0][0] = points[i + 1][0]->height - points[i - 1][0]->height;
             normals[i][0][2] = (points[i][0]->height - points[i][1]->height) * 2;
 
-            normals[i][last_y][0] = points[i - 1][last_y]->height - points[i + 1][last_y]->height;
+            normals[i][last_y][0] = points[i + 1][last_y]->height - points[i - 1][last_y]->height;
             normals[i][last_y][2] = (points[i][last_y - 1]->height - points[i][last_y]->height) * 2;
         }
 
         for (size_t i = 1; i < points[0].size() - 1; i++) {
-			normals[0][i][0] = (points[0][i]->height - points[1][i]->height) * 2;
+			normals[0][i][0] = (points[1][i]->height - points[0][i]->height) * 2;
 			normals[0][i][2] = points[0][i - 1]->height - points[0][i + 1]->height;
 
-			normals[last_x][i][0] = (points[last_x - 1][i]->height - points[last_x][i]->height) * 2;
+			normals[last_x][i][0] = (points[last_x][i]->height - points[last_x - 1][i]->height) * 2;
 			normals[last_x][i][2] = points[last_x][i - 1]->height - points[last_x][i + 1]->height;
         }
 
-        normals[0][0][0] = (points[0][0]->height - points[1][0]->height) * 2;
+        normals[0][0][0] = (points[1][0]->height - points[0][0]->height) * 2;
         normals[0][0][2] = (points[0][0]->height - points[0][1]->height) * 2;
 
-        normals[0][last_y][0] = (points[0][last_y]->height - points[1][last_y]->height) * 2;
+        normals[0][last_y][0] = (points[1][last_y]->height - points[0][last_y]->height) * 2;
         normals[0][last_y][2] = (points[0][last_y - 1]->height - points[0][last_y]->height) * 2;
 
-        normals[last_x][0][0] = (points[last_x - 1][0]->height - points[last_x][0]->height) * 2;
+        normals[last_x][0][0] = (points[last_x][0]->height - points[last_x - 1][0]->height) * 2;
         normals[last_x][0][2] = (points[last_x][0]->height - points[last_x][1]->height) * 2;
 
-        normals[last_x][last_y][0] = (points[last_x - 1][last_y]->height - points[last_x][last_y]->height) * 2;
+        normals[last_x][last_y][0] = (points[last_x][last_y]->height - points[last_x - 1][last_y]->height) * 2;
         normals[last_x][last_y][2] = (points[last_x][last_y - 1]->height - points[last_x][last_y]->height) * 2;
 
         // ê≥ãKâª
 
         for (size_t i = 0; i < points.size(); i++) {
             for (size_t j = 0; j < points[0].size(); j++) {
-                double len = sqrt(normals[i][j][0] * normals[i][j][0] + normals[i][j][1] * normals[i][j][1] + normals[i][j][2] * normals[i][j][2]);
+                double len = sqrt(normals[i][j][0] * normals[i][j][0] + NORMAL_Y * NORMAL_Y + normals[i][j][2] * normals[i][j][2]);
 				normals[i][j][0] /= len;
-                normals[i][j][1] /= len;
+                normals[i][j][1] = NORMAL_Y / len;
 				normals[i][j][2] /= len;
 			}
 		}
@@ -217,47 +240,130 @@ public:
         double center_x = (points.size() - 1) / 2.0;
         double center_z = (points[0].size() - 1) / 2.0;
 
-        material.apply();
-
-        float buf[4] = { 0, 0, 0, 1 };
-
-        //glEnable(GL_COLOR_MATERIAL);
-        //glColorMaterial(GL_FRONT, GL_SPECULAR);
+        float color[4] = {};
+        std::array<float, 4> specular = { 0.5, 0.5, 0.5, 1.0 };
 
         for (size_t i = 0; i < points.size() - 1; i++) {
             glBegin(GL_TRIANGLE_STRIP);
             for (size_t j = 0; j < points[0].size(); j++) {
                 glNormal3d(normals[i][j][0], normals[i][j][1], normals[i][j][2]);
-                float F_schlick = schlick(specular, light_position, normals[i][j]);
-                F_schlick /= 100000000000000000000.0;
-                buf[0] = F_schlick;
-                buf[1] = F_schlick;
-                buf[2] = F_schlick;
-                buf[3] = 0;
-                glMaterialfv(GL_FRONT, GL_SPECULAR, buf);
-                //buf[0] = 0;
-                //buf[1] = 0;
-                //buf[2] = 0;
-                //buf[3] = 1;
-                //glColor4f(F_schlick, F_schlick, F_schlick, 0.9);
+                env->calcSpecular(material.specular, normals[i][j], 0.3, specular);
+                float sum_a = material.ambient[3] + specular[3];
+                color[0] = material.ambient[0] * material.ambient[3] + specular[0] * specular[3];
+                color[1] = material.ambient[1] * material.ambient[3] + specular[1] * specular[3];
+                color[2] = material.ambient[2] * material.ambient[3] + specular[2] * specular[3];
+                color[0] /= sum_a;
+                color[1] /= sum_a;
+                color[2] /= sum_a;
+                color[3] = 1 - (1 - material.ambient[3]) * (1 - specular[3]);
+                glMaterialfv(GL_FRONT, GL_AMBIENT, color);
+                material.diffuse[3] = color[3];
+                glMaterialfv(GL_FRONT, GL_DIFFUSE, material.diffuse);
                 glVertex3d((i - center_x), points[i][j]->height, (j - center_z));
 
 				glNormal3d(normals[i + 1][j][0], normals[i+1][j][1], normals[i + 1][j][2]);
-                F_schlick = schlick(specular, light_position, normals[i + 1][j]);
-                F_schlick /= 100000000000000000000.0;
-				buf[0] = F_schlick;
-				buf[1] = F_schlick;
-				buf[2] = F_schlick;
-                buf[3] = 0;
-                glMaterialfv(GL_FRONT, GL_SPECULAR, buf);
-                //glColor4f(F_schlick, F_schlick, F_schlick, 0.9);
+                env->calcSpecular(material.specular, normals[i+1][j], 0.3, specular);
+                sum_a = material.ambient[3] + specular[3];
+                color[0] = material.ambient[0] * material.ambient[3] + specular[0] * specular[3];
+                color[1] = material.ambient[1] * material.ambient[3] + specular[1] * specular[3];
+                color[2] = material.ambient[2] * material.ambient[3] + specular[2] * specular[3];
+                color[0] /= sum_a;
+                color[1] /= sum_a;
+                color[2] /= sum_a;
+                color[3] = 1 - (1 - material.ambient[3]) * (1 - specular[3]);
+                glMaterialfv(GL_FRONT, GL_AMBIENT, color);
+                material.diffuse[3] = color[3];
+                glMaterialfv(GL_FRONT, GL_DIFFUSE, material.diffuse);
                 glVertex3d((i + 1 - center_x), points[i + 1][j]->height, (j - center_z));
             }
             glEnd();
 		}
-        //glDisable(GL_COLOR_MATERIAL);
     }
 };
+
+// Environment(private)
+
+void Environment::calcH()
+{
+    double ray[3] = { center[0] - eye[0], center[1] - eye[1], center[2] - eye[2] };
+    H = { light_position[0] - ray[0], light_position[1] - ray[1], light_position[2] - ray[2] };
+	double len = sqrt(H[0] * H[0] + H[1] * H[1] + H[2] * H[2]);
+	H[0] /= len;
+	H[1] /= len;
+	H[2] /= len;
+}
+
+// Environment
+
+Environment::Environment()
+{
+	eye = { 0, 0, 0 };
+	center = { 0, 0, -1 };
+	up = { 0, 1, 0 };
+	light_position = { 0, 1, 0 };
+	light_color = { 1, 1, 1, 1 };
+	calcH();
+}
+
+void Environment::lookAt(std::array<double, 3> const& eye, std::array<double, 3> const& center, std::array<double, 3> const& up)
+{
+	this->eye = eye;
+	this->center = center;
+	this->up = up;
+    
+    calcH();
+}
+
+void Environment::setLightPosition(std::array<double, 3> const& light_position)
+{
+	this->light_position = light_position;
+
+    double len = sqrt(light_position[0] * light_position[0] + light_position[1] * light_position[1] + light_position[2] * light_position[2]);
+    this->light_position[0] /= len;
+    this->light_position[1] /= len;
+    this->light_position[2] /= len;
+
+    calcH();
+}
+
+void Environment::setLightColor(std::array<float, 4> const& light_color)
+{
+	this->light_color = light_color;
+}
+
+void Environment::calcSpecular(std::array<float, 4> const& material, std::array<double, 3> const& normal, double smoothness, std::array<float, 4>& output_specular)
+{
+	double c_spec = 0.2;
+	double c = light_position[0] * normal[0] + light_position[1] * normal[1] + light_position[2] * normal[2];
+
+    double F_schlick = c_spec + (1 - c_spec) * pow(1 - c, 5);
+    double angle_H = H[0] * normal[0] + H[1] * normal[1] + H[2] * normal[2];
+    angle_H /= smoothness;
+    double k_spec = exp(- angle_H * angle_H);
+
+	output_specular[0] = material[0] * light_color[0] * F_schlick * k_spec;
+    output_specular[1] = material[1] * light_color[1] * F_schlick * k_spec;
+    output_specular[2] = material[2] * light_color[2] * F_schlick * k_spec;
+    output_specular[3] = material[3] * light_color[3] * F_schlick * k_spec;
+}
+
+void Environment::apply()
+{
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    gluPerspective(45, 1.0, 1.0, 50.0);
+	gluLookAt(eye[0], eye[1], eye[2], center[0], center[1], center[2], up[0], up[1], up[2]);
+	
+    glMatrixMode(GL_MODELVIEW);
+    glPushMatrix();
+    glLoadIdentity();
+    float pos[] = { light_position[0], light_position[1], light_position[2], 0.0 };
+	glLightfv(GL_LIGHT0, GL_POSITION, pos);
+	glLightfv(GL_LIGHT0, GL_DIFFUSE, black);
+	glLightfv(GL_LIGHT0, GL_AMBIENT, light_color.data());
+    glPopMatrix();
+}
+
 
 void display();
 void key(unsigned char key, int x, int y);
@@ -272,8 +378,10 @@ int main(int argc, char** argv)
 {
     glutInit(&argc, argv);
 
-    waterSurface = new WaterSurface(100, 100, 0.01);
-    waterSurface->material = Material(Params(0.1f, 0.1f, 0.1f, 0.1f), Params(black).alpha(1.0f), Params(black), 128);
+    waterSurface = new WaterSurface(100, 100, 0.1);
+    waterSurface->material = Material(Params(transparent), Params(transparent), Params(white), 128);
+
+    env = new Environment();
 
     glutInitWindowPosition(0, 0);
     glutInitWindowSize(800, 800);
@@ -281,11 +389,12 @@ int main(int argc, char** argv)
     glutCreateWindow("ìd20-0070 è¨ñxê≥é˜");
     glClearColor(0.0, 0.0, 0.0, 1.0);
 
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    gluPerspective(45, 1.0, 1.0, 50.0);
+    //glMatrixMode(GL_PROJECTION);
+    //glLoadIdentity();
+    //gluPerspective(45, 1.0, 1.0, 50.0);
 //    gluLookAt(0, 1, 0, 0, 0.5, -8, 0, 1, 0);
-    gluLookAt(0, 3, 0, 0, 0, -8, 0, 1, 0);
+    //gluLookAt(0, 3, 0, 0, 0, -8, 0, 1, 0);
+    env->lookAt({ 0, 2, 8 }, { 0, 0, 0 }, { 0, 1, 0 });
 
     glShadeModel(GL_SMOOTH);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -294,25 +403,16 @@ int main(int argc, char** argv)
     glEnable(GL_LIGHTING);
     glEnable(GL_DEPTH_TEST);
 
-    // light_positionê≥ãKâª
-    float len = sqrt(light_position[0] * light_position[0] + light_position[1] * light_position[1] + light_position[2] * light_position[2]);
-    light_position[0] /= len;
-    light_position[1] /= len;
-    light_position[2] /= len;
+    env->setLightPosition({ 0, 1, -5 });
+    env->setLightColor({ 1, 1, 1, 1 });
 
-    float pos[] = {light_position[0], light_position[1], light_position[2], 0.0};
-
-    glLightfv(GL_LIGHT0, GL_POSITION, pos);
-    glLightfv(GL_LIGHT0, GL_DIFFUSE, white);
-    glLightfv(GL_LIGHT0, GL_SPECULAR, white);
-    glLightfv(GL_LIGHT0, GL_AMBIENT, white);
+    env->apply();
 
     glutDisplayFunc(display);
     glutKeyboardFunc(key);
     glutTimerFunc(100, update, 0);
     glutTimerFunc(100, drawWaterSurface, 1);
     glutTimerFunc(100, rain, 2);
-    glutTimerFunc(100, changeLightPosition, 3);
     glutMainLoop();
 	return 0;
 }
@@ -323,8 +423,6 @@ void display()
 
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
-
-    glTranslated(0, 0, -5);
 
     // îwåi
     glMaterialfv(GL_FRONT, GL_DIFFUSE, Params(white).maltiply(0.5));
@@ -339,12 +437,12 @@ void display()
     glVertex3d(10, -1, -10);
     glEnd();
 
-    glTranslated(0, 0, -5);
 
     if (waterSurface != nullptr)
     {
         glPushMatrix();
         glScaled(0.1, 0.5, 0.1);
+        glTranslated(0, 1, 0);
         waterSurface->draw();
         glPopMatrix();
     }
@@ -384,15 +482,22 @@ void rain(int timer_id)
     {
 		return;
 	}
-    
-    uint64_t x = rand() % 98;
-    uint64_t y = rand() % 98;
 
-    waterSurface->addForce(x + 1, y + 1, -0.5);
-    waterSurface->addForce(x + 1, y, -0.25);
-    waterSurface->addForce(x + 1, y + 2, -0.25);
-    waterSurface->addForce(x, y + 1, -0.25);
-    waterSurface->addForce(x + 2, y + 1, -0.25);
+    const int64_t r = 4;
+    
+    uint64_t x = rand() % (100 - r * 2) + r;
+    uint64_t y = rand() % (100 - r * 2) + r;
+
+    for (int i = -r; i <= r; i++)
+    {
+        for (int j = -r; j <= r; j++)
+        {
+            if (i * i + j * j <= r * r)
+            {
+				waterSurface->addForce(x + i, y + j, - 2 * exp(- i * i - j * j));
+			}
+		}
+	}
 
 	glutTimerFunc(50 + rand() % 100, rain, 2);
 }
@@ -430,8 +535,12 @@ void changeLightPosition(int timer_id)
 //	light_position[0] = sin(count);
 	light_position[1] = abs(cos(count));
 	light_position[2] = sin(count);
-	glLightfv(GL_LIGHT0, GL_POSITION, light_position);
+
+	env->setLightPosition({ light_position[0], light_position[1], light_position[2] });
+	env->apply();
 
     if(change)
 	glutTimerFunc(50, changeLightPosition, 3);
+    else
+        std::cout << "y = " << light_position[1] << " z = " << light_position[2] << std::endl;
 }
