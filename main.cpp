@@ -31,6 +31,7 @@ public:
     void setLightColor(std::array<float, 4> const& light_color);
     void calcSpecular(std::array<float, 4> const& material, std::array<double, 3> const& normal, double smoothness, std::array<float, 4>& output_specular);
     void apply();
+    float calcFresnelReflectance(double c_spec, std::array<double, 3> const& normal);
 };
 
 Environment* env;
@@ -187,15 +188,15 @@ public:
 
     static constexpr double NORMAL_Y = 2;
 
-    void draw()
+    void draw(float gain = 1.0f)
     {
 
-        std::vector<std::vector<std::array<double, 3>>> normals(points.size(), std::vector<std::array<double, 3>>(points[0].size(), {0,NORMAL_Y, 0}));
+        std::vector<std::vector<std::array<double, 3>>> normals(points.size(), std::vector<std::array<double, 3>>(points[0].size(), {gain, NORMAL_Y, gain}));
         
         for (size_t i = 1; i < points.size() - 1; i++) {
             for (size_t j = 1; j < points[0].size() - 1; j++) {
-                normals[i][j][0] = points[i + 1][j]->height - points[i - 1][j]->height;
-                normals[i][j][2] = points[i][j - 1]->height - points[i][j + 1]->height;
+                normals[i][j][0] *= points[i + 1][j]->height - points[i - 1][j]->height;
+                normals[i][j][2] *= points[i][j - 1]->height - points[i][j + 1]->height;
             }
         }
 
@@ -203,32 +204,32 @@ public:
         size_t last_y = points[0].size() - 1;
 
         for (size_t i = 1; i < points.size() - 1; i++) {
-            normals[i][0][0] = points[i + 1][0]->height - points[i - 1][0]->height;
-            normals[i][0][2] = (points[i][0]->height - points[i][1]->height) * 2;
+            normals[i][0][0] *= points[i + 1][0]->height - points[i - 1][0]->height;
+            normals[i][0][2] *= (points[i][0]->height - points[i][1]->height) * 2;
 
-            normals[i][last_y][0] = points[i + 1][last_y]->height - points[i - 1][last_y]->height;
-            normals[i][last_y][2] = (points[i][last_y - 1]->height - points[i][last_y]->height) * 2;
+            normals[i][last_y][0] *= points[i + 1][last_y]->height - points[i - 1][last_y]->height;
+            normals[i][last_y][2] *= (points[i][last_y - 1]->height - points[i][last_y]->height) * 2;
         }
 
         for (size_t i = 1; i < points[0].size() - 1; i++) {
-			normals[0][i][0] = (points[1][i]->height - points[0][i]->height) * 2;
-			normals[0][i][2] = points[0][i - 1]->height - points[0][i + 1]->height;
+			normals[0][i][0] *= (points[1][i]->height - points[0][i]->height) * 2;
+			normals[0][i][2] *= points[0][i - 1]->height - points[0][i + 1]->height;
 
-			normals[last_x][i][0] = (points[last_x][i]->height - points[last_x - 1][i]->height) * 2;
-			normals[last_x][i][2] = points[last_x][i - 1]->height - points[last_x][i + 1]->height;
+			normals[last_x][i][0] *= (points[last_x][i]->height - points[last_x - 1][i]->height) * 2;
+			normals[last_x][i][2] *= points[last_x][i - 1]->height - points[last_x][i + 1]->height;
         }
 
-        normals[0][0][0] = (points[1][0]->height - points[0][0]->height) * 2;
-        normals[0][0][2] = (points[0][0]->height - points[0][1]->height) * 2;
+        normals[0][0][0] *= (points[1][0]->height - points[0][0]->height) * 2;
+        normals[0][0][2] *= (points[0][0]->height - points[0][1]->height) * 2;
 
-        normals[0][last_y][0] = (points[1][last_y]->height - points[0][last_y]->height) * 2;
-        normals[0][last_y][2] = (points[0][last_y - 1]->height - points[0][last_y]->height) * 2;
+        normals[0][last_y][0] *= (points[1][last_y]->height - points[0][last_y]->height) * 2;
+        normals[0][last_y][2] *= (points[0][last_y - 1]->height - points[0][last_y]->height) * 2;
 
-        normals[last_x][0][0] = (points[last_x][0]->height - points[last_x - 1][0]->height) * 2;
-        normals[last_x][0][2] = (points[last_x][0]->height - points[last_x][1]->height) * 2;
+        normals[last_x][0][0] *= (points[last_x][0]->height - points[last_x - 1][0]->height) * 2;
+        normals[last_x][0][2] *= (points[last_x][0]->height - points[last_x][1]->height) * 2;
 
-        normals[last_x][last_y][0] = (points[last_x][last_y]->height - points[last_x - 1][last_y]->height) * 2;
-        normals[last_x][last_y][2] = (points[last_x][last_y - 1]->height - points[last_x][last_y]->height) * 2;
+        normals[last_x][last_y][0] *= (points[last_x][last_y]->height - points[last_x - 1][last_y]->height) * 2;
+        normals[last_x][last_y][2] *= (points[last_x][last_y - 1]->height - points[last_x][last_y]->height) * 2;
 
         // ê≥ãKâª
 
@@ -245,44 +246,32 @@ public:
         double center_x = (points.size() - 1) / 2.0;
         double center_z = (points[0].size() - 1) / 2.0;
 
-        float color[4] = {};
-        std::array<float, 4> specular = { 0.5, 0.5, 0.5, 1.0 };
+        material.apply();
+
+        glEnable(GL_COLOR_MATERIAL);
+        glEnable(GL_NORMALIZE);
+        glColorMaterial(GL_FRONT, GL_SPECULAR);
+
+        float F;
 
         for (size_t j = 0; j < points[0].size() - 1; j++) {
             glBegin(GL_TRIANGLE_STRIP);
             for (size_t i = 0; i < points.size(); i++) {
                 glNormal3d(normals[i][j][0], normals[i][j][1], normals[i][j][2]);
-                env->calcSpecular(material.specular, normals[i][j], 0.2, specular);
-                float sum_a = material.ambient[3] + specular[3];
-                color[0] = material.ambient[0] * material.ambient[3] + specular[0] * specular[3];
-                color[1] = material.ambient[1] * material.ambient[3] + specular[1] * specular[3];
-                color[2] = material.ambient[2] * material.ambient[3] + specular[2] * specular[3];
-                color[0] /= sum_a;
-                color[1] /= sum_a;
-                color[2] /= sum_a;
-                color[3] = 1 - (1 - material.ambient[3]) * (1 - specular[3]);
-                glMaterialfv(GL_FRONT, GL_AMBIENT, color);
-                material.diffuse[3] = color[3];
-                glMaterialfv(GL_FRONT, GL_DIFFUSE, material.diffuse);
-                glVertex3d((i - center_x), points[i][j]->height, (j - center_z));
+                F = env->calcFresnelReflectance(0.2, normals[i][j]);
+                glColor4f(F, F, F, 1);
+                glVertex3d((i - center_x), points[i][j]->height * gain, (j - center_z));
 
 				glNormal3d(normals[i][j + 1][0], normals[i][j + 1][1], normals[i][j + 1][2]);
-                env->calcSpecular(material.specular, normals[i][j + 1], 0.2, specular);
-                sum_a = material.ambient[3] + specular[3];
-                color[0] = material.ambient[0] * material.ambient[3] + specular[0] * specular[3];
-                color[1] = material.ambient[1] * material.ambient[3] + specular[1] * specular[3];
-                color[2] = material.ambient[2] * material.ambient[3] + specular[2] * specular[3];
-                color[0] /= sum_a;
-                color[1] /= sum_a;
-                color[2] /= sum_a;
-                color[3] = 1 - (1 - material.ambient[3]) * (1 - specular[3]);
-                glMaterialfv(GL_FRONT, GL_AMBIENT, color);
-                material.diffuse[3] = color[3];
-                glMaterialfv(GL_FRONT, GL_DIFFUSE, material.diffuse);
-                glVertex3d((i - center_x), points[i][j + 1]->height, (j + 1 - center_z));
+                F = env->calcFresnelReflectance(0.2, normals[i][j + 1]);
+                glColor4f(F, F, F, 1);
+                glVertex3d((i - center_x), points[i][j + 1]->height * gain, (j + 1 - center_z));
             }
             glEnd();
 		}
+
+        glDisable(GL_COLOR_MATERIAL);
+        glDisable(GL_NORMALIZE);
     }
 };
 
@@ -362,21 +351,29 @@ void Environment::calcSpecular(std::array<float, 4> const& material, std::array<
 //    output_specular[3] = scaled_sigmoide(output_specular[3], 100, 0.55);
 }
 
+float Environment::calcFresnelReflectance(double c_spec, std::array<double, 3> const& normal)
+{
+	double c = light_position[0] * normal[0] + light_position[1] * normal[1] + light_position[2] * normal[2];
+
+    if(c >= 0)
+		return c_spec + (1 - c_spec) * pow(1 - c, 5);
+	else
+	    return c_spec + (1 - c_spec) * pow(1 + c, 5);
+}
+
 void Environment::apply()
 {
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    gluPerspective(45, 1.0, 1.0, 50.0);
-	gluLookAt(eye[0], eye[1], eye[2], center[0], center[1], center[2], up[0], up[1], up[2]);
-	
+
+
     glMatrixMode(GL_MODELVIEW);
-    glPushMatrix();
     glLoadIdentity();
+    gluLookAt(eye[0], eye[1], eye[2], center[0], center[1], center[2], up[0], up[1], up[2]);
     float pos[] = { light_position[0], light_position[1], light_position[2], 0.0 };
-	glLightfv(GL_LIGHT0, GL_POSITION, pos);
-	glLightfv(GL_LIGHT0, GL_DIFFUSE, light_color.data());
+    glLightfv(GL_LIGHT0, GL_POSITION, pos);
+
+    glLightfv(GL_LIGHT0, GL_DIFFUSE, light_color.data());
 	glLightfv(GL_LIGHT0, GL_AMBIENT, light_color.data());
-    glPopMatrix();
+	glLightfv(GL_LIGHT0, GL_SPECULAR, light_color.data());
 }
 
 
@@ -386,6 +383,7 @@ void update(int timer_id);
 void drawWaterSurface(int timer_id);
 void rain(int timer_id);
 void changeLightPosition(int timer_id);
+void changeEyePosition(int timer_id);
 
 WaterSurface* waterSurface;
 
@@ -394,7 +392,7 @@ int main(int argc, char** argv)
     glutInit(&argc, argv);
 
     waterSurface = new WaterSurface(100, 100, 0.06);
-    waterSurface->material = Material(Params(white).alpha(0.05f).maltiply(0.1f), Params(white).alpha(0.05f), Params(white), 128);
+    waterSurface->material = Material(Params(black), Params(white).maltiply(0.01f), Params(white), 128);
 
     env = new Environment();
 
@@ -409,10 +407,15 @@ int main(int argc, char** argv)
     //gluPerspective(45, 1.0, 1.0, 50.0);
 //    gluLookAt(0, 1, 0, 0, 0.5, -8, 0, 1, 0);
     //gluLookAt(0, 3, 0, 0, 0, -8, 0, 1, 0);
+
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    gluPerspective(45, 1.0, 1.0, 50.0);
+
     env->lookAt({ 0, 5, 8 }, { 0, 0, 0 }, { 0, 1, 0 });
 
     glShadeModel(GL_SMOOTH);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glBlendFunc(GL_ONE, GL_ONE);
     glEnable(GL_BLEND);
     glEnable(GL_LIGHT0);
     glEnable(GL_LIGHTING);
@@ -420,8 +423,6 @@ int main(int argc, char** argv)
 
     env->setLightPosition({ 0, 1, -6 });
     env->setLightColor({ 1, 1, 1, 1 });
-
-    env->apply();
 
     glutDisplayFunc(display);
     glutKeyboardFunc(key);
@@ -436,8 +437,9 @@ void display()
 {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+    env->apply();
+
 	glMatrixMode(GL_MODELVIEW);
-	glLoadIdentity();
 
     // îwåi
     glMaterialfv(GL_FRONT, GL_DIFFUSE, Params(white).maltiply(0.5));
@@ -458,7 +460,7 @@ void display()
         glPushMatrix();
         glScaled(0.1, 0.1, 0.1);
         glTranslated(0, 1, 0);
-        waterSurface->draw();
+        waterSurface->draw(5.0f);
         glPopMatrix();
     }
 
@@ -531,6 +533,10 @@ void rain(int timer_id)
 }
 
 bool change = false;
+bool changeEye = false;
+
+double angle_y = 0;
+double angle_xz = 3.1415926535 / 4;
 
 void key(unsigned char key, int x, int y)
 {
@@ -542,6 +548,75 @@ void key(unsigned char key, int x, int y)
             glutTimerFunc(50, changeLightPosition, 3);
 		}
 	}
+ //   if (key == 'e')
+ //   {
+	//	changeEye = !changeEye;
+ //       if (changeEye)
+ //       {
+	//		glutTimerFunc(50, changeEyePosition, 4);
+	//	}
+	//}
+
+
+    bool change_angle = false;
+
+    if (key == 'w')
+    {
+        // éãì_Çè„Ç…à⁄ìÆ
+        angle_xz += 0.1;
+	    change_angle = true;
+    }
+    if (key == 's')
+    {
+		// éãì_Çâ∫Ç…à⁄ìÆ
+		angle_xz -= 0.1;
+        change_angle = true;
+    }
+    if (key == 'a')
+    {
+        // éãì_Çç∂Ç…à⁄ìÆ
+        angle_y -= 0.1;
+        change_angle = true;
+    }
+    if (key == 'd')
+    {
+		// éãì_ÇâEÇ…à⁄ìÆ
+		angle_y += 0.1;
+        change_angle = true;
+	}
+
+    // angleÇêßå¿
+    if(angle_xz > 3.141592 / 2)
+	{
+        angle_xz = 3.141592 / 2;
+    }
+    if (angle_xz < -3.141592 / 2)
+    {
+		angle_xz = -3.141592 / 2;
+	}
+
+    // angle_yÇ0Ç©ÇÁ2ÉŒÇÃîÕàÕÇ…é˚ÇﬂÇÈ
+    if (angle_y > 2 * 3.141592)
+    {
+        angle_y -= 2 * 3.141592;
+    }
+    if (angle_y < 0)
+    {
+        angle_y += 2 * 3.141592;
+    }
+    
+    if (change_angle) {
+        std::array<double, 3> eye = {};
+        eye[0] = sin(angle_y) * cos(angle_xz);
+        eye[1] = abs(sin(angle_xz));
+        eye[2] = cos(angle_y) * cos(angle_xz);
+
+        eye[0] *= 9;
+        eye[1] *= 9;
+        eye[2] *= 9;
+
+        env->lookAt(eye, { 0, 0, 0 }, { 0, 1, 0 });
+    }
 }
 
 double count = 0;
@@ -565,10 +640,37 @@ void changeLightPosition(int timer_id)
 	light_position[2] = sin(count);
 
 	env->setLightPosition({ light_position[0], light_position[1], light_position[2] });
-	env->apply();
 
     if(change)
 	glutTimerFunc(50, changeLightPosition, 3);
     else
         std::cout << "y = " << light_position[1] << " z = " << light_position[2] << std::endl;
+}
+
+double angle = 0;
+
+void changeEyePosition(int timer_id)
+{
+    if (timer_id != 4)
+    {
+		return;
+	}
+
+    angle += 0.005;
+    if (angle > 2 * 3.141592)
+    {
+        angle = 0;
+	}
+
+    float eye_position[] = { 0, 1.0, 0, 0.0 };
+	eye_position[0] = 3 * sin(angle);
+	eye_position[1] = 9 * abs(cos(angle));
+	eye_position[2] = 3 * sin(angle * 2);
+
+	env->lookAt({ eye_position[0], eye_position[1], eye_position[2] }, { 0, 0, 0 }, { 0, 1, 0 });
+
+	if(changeEye)
+	glutTimerFunc(50, changeEyePosition, 4);
+	else
+		std::cout << "x = " << eye_position[0] << " y = " << eye_position[1] << " z = " << eye_position[2] << std::endl;
 }
