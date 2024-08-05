@@ -4,14 +4,18 @@
 #include <array>
 #include <cmath>
 #include <iostream>
+#include <random>
 
 constexpr float FRAMES_PER_SECOND = 20;
 
-constexpr float white[] = { 1.0, 1.0, 1.0, 1.0 };
-constexpr float black[] = { 0.0, 0.0, 0.0, 1.0 };
-constexpr float transparent[] = { 0.0, 0.0, 0.0, 0.0 };
+constexpr float white[] = {1.0, 1.0, 1.0, 1.0};
+constexpr float black[] = {0.0, 0.0, 0.0, 1.0};
+constexpr float sunset[] = {0.92549, 0.3647059, 0.058823, 1.0};
+constexpr float transparent[] = {0.0, 0.0, 0.0, 0.0};
+constexpr double PI = 3.1415926535;
 
-std::array<double, 3> light_position = { 0, 1, -30 };
+std::mt19937 *random_engine = nullptr;
+std::uniform_real_distribution<double> random_dist(0, 1);
 
 class Environment
 {
@@ -31,10 +35,113 @@ public:
     void setLightColor(std::array<float, 4> const& light_color);
     void calcSpecular(std::array<float, 4> const& material, std::array<double, 3> const& normal, double smoothness, std::array<float, 4>& output_specular);
     void apply();
-    float calcFresnelReflectance(double c_spec, std::array<double, 3> const& normal);
+    float calcFresnelReflectance(double c_spec, std::array<double, 3> const &normal);
 };
 
-Environment* env;
+class Transition
+{
+    std::array<double, 3> next_light_position;
+    std::array<float, 4> next_light_color;
+
+    std::array<double, 3> prev_light_position;
+    std::array<float, 4> prev_light_color;
+
+    uint64_t transition_time_ms;
+    uint64_t current_time = 0;
+    double prev_raindrops_per_second;
+    double next_raindrops_per_second;
+
+public:
+    Transition(std::array<double, 3> const &prev_light_position, std::array<float, 4> const &prev_light_color, double prev_raindrops_per_second) : prev_light_position(prev_light_position), prev_light_color(prev_light_color), prev_raindrops_per_second(prev_raindrops_per_second)
+    {
+        // 0~0.7なら
+        // next_light_colorをwhiteからsunsetの間でランダムに決定する
+        // 0.7~1.0なら
+        // next_light_colorをwhiteの0.7~1.0倍の間でランダムに決定する
+
+        double random_value = random_dist(*random_engine);
+        if (random_value < 0.7)
+        {
+            random_value = random_dist(*random_engine);
+            this->next_light_color[0] = white[0] * (1 - random_value) + sunset[0] * random_value;
+            this->next_light_color[1] = white[1] * (1 - random_value) + sunset[1] * random_value;
+            this->next_light_color[2] = white[2] * (1 - random_value) + sunset[2] * random_value;
+            this->next_light_color[3] = 1.0;
+        }
+        else
+        {
+            this->next_light_color[0] = white[0] * (1 - random_value) + white[0] * random_value;
+            this->next_light_color[1] = white[1] * (1 - random_value) + white[1] * random_value;
+            this->next_light_color[2] = white[2] * (1 - random_value) + white[2] * random_value;
+            this->next_light_color[3] = 1.0;
+        }
+
+        // radをπ/8から2π/6の間でランダムに決定する
+        random_value = random_dist(*random_engine);
+        double rad = PI / 8 * (1 - random_value) + 2 * PI / 6 * random_value;
+
+        this->next_light_position[1] = sin(rad);
+        this->next_light_position[2] = -cos(rad);
+        // radを-π/12からπ/12の間でランダムに決定する
+        random_value = random_dist(*random_engine);
+        rad = -PI / 12 * (1 - random_value) + PI / 12 * random_value;
+        this->next_light_position[0] = sin(rad);
+
+        // 1分から5分の間でランダムに決定する
+        random_value = random_dist(*random_engine);
+        //        this->transition_time_ms = 60000 * (1 - random_value) + 300000 * random_value;
+        this->transition_time_ms = 15000;
+
+        // raindrops_per_secondを2から10の間でランダムに決定する
+        random_value = random_dist(*random_engine);
+        this->next_raindrops_per_second = 2 * (1 - random_value) + 10 * random_value;
+    }
+
+    void applyEnvironment(Environment *env)
+    {
+        std::array<double, 3> current_light_position;
+        std::array<float, 4> current_light_color;
+
+        double transition_ratio = (double)current_time / transition_time_ms;
+
+        current_light_position[0] = prev_light_position[0] * (1 - transition_ratio) + next_light_position[0] * transition_ratio;
+        current_light_position[1] = prev_light_position[1] * (1 - transition_ratio) + next_light_position[1] * transition_ratio;
+        current_light_position[2] = prev_light_position[2] * (1 - transition_ratio) + next_light_position[2] * transition_ratio;
+
+        current_light_color[0] = prev_light_color[0] * (1 - transition_ratio) + next_light_color[0] * transition_ratio;
+        current_light_color[1] = prev_light_color[1] * (1 - transition_ratio) + next_light_color[1] * transition_ratio;
+        current_light_color[2] = prev_light_color[2] * (1 - transition_ratio) + next_light_color[2] * transition_ratio;
+        current_light_color[3] = 1.0;
+
+        env->setLightPosition(current_light_position);
+        env->setLightColor(current_light_color);
+    }
+
+    void update(uint64_t dt)
+    {
+        current_time += dt;
+    }
+
+    uint64_t getTimeUntilNextRaindrop() const
+    {
+        double current_raindrops_per_second = prev_raindrops_per_second * (1 - (double)current_time / transition_time_ms) + next_raindrops_per_second * (double)current_time / transition_time_ms;
+        std::exponential_distribution<double> dist(current_raindrops_per_second);
+        return dist(*random_engine) * 1000;
+    }
+
+    bool isFinished() const
+    {
+        return current_time >= transition_time_ms;
+    }
+
+    Transition *createNextTransition()
+    {
+        return new Transition(next_light_position, next_light_color, next_raindrops_per_second);
+    }
+};
+
+Environment *env;
+Transition *transition = nullptr;
 
 class MassPoint
 {
@@ -408,6 +515,14 @@ int main(int argc, char** argv)
 
     env = new Environment();
 
+    // 乱数生成器の初期化
+    std::random_device seed_gen;
+    random_engine = new std::mt19937(seed_gen());
+
+    // Transitionの初期化
+    transition = new Transition({0, 1, -6}, {1, 1, 1, 1}, 5);
+
+
     glutInitWindowPosition(0, 0);
     glutInitWindowSize(800, 800);
     glutInitDisplayMode(GLUT_RGBA | GLUT_DEPTH | GLUT_ALPHA);
@@ -487,6 +602,16 @@ void drawWaterSurface(int timer_id)
         return;
     }
 
+    transition->update(1000 / FRAMES_PER_SECOND);
+    transition->applyEnvironment(env);
+
+    if (transition->isFinished())
+    {
+        Transition *next_transition = transition->createNextTransition();
+        delete transition;
+        transition = next_transition;
+    }
+
     glutPostRedisplay();
     glutTimerFunc(1000 / FRAMES_PER_SECOND, drawWaterSurface, 1);
 }
@@ -541,7 +666,7 @@ void rain(int timer_id)
 
     //waterSurface->addForce(rand() % 100, rand() % 100, -2);
 
-	glutTimerFunc(rand() % 1000, rain, 2);
+    glutTimerFunc(transition->getTimeUntilNextRaindrop(), rain, 2);
 }
 
 bool change = false;
