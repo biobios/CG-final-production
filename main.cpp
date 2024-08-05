@@ -503,6 +503,7 @@ void drawWaterSurface(int timer_id);
 void rain(int timer_id);
 void changeLightPosition(int timer_id);
 void changeEyePosition(int timer_id);
+void reshapeWindow(int w, int h);
 
 WaterSurface* waterSurface;
 
@@ -522,11 +523,13 @@ int main(int argc, char** argv)
     // Transitionの初期化
     transition = new Transition({0, 1, -6}, {1, 1, 1, 1}, 5);
 
+    const int init_width = 1200;
+    const int init_height = 800;
 
     glutInitWindowPosition(0, 0);
-    glutInitWindowSize(800, 800);
+    glutInitWindowSize(init_width, init_height);
     glutInitDisplayMode(GLUT_RGBA | GLUT_DEPTH | GLUT_ALPHA);
-    glutCreateWindow("�d20-0070 ���x����");
+    glutCreateWindow("電20-0070 小堀正樹");
     glClearColor(0.0, 0.0, 0.0, 1.0);
 
     //glMatrixMode(GL_PROJECTION);
@@ -666,6 +669,14 @@ void drawWaterSurface(int timer_id)
 
     glutPostRedisplay();
     glutTimerFunc(1000 / FRAMES_PER_SECOND, drawWaterSurface, 1);
+}
+
+void reshapeWindow(int w, int h)
+{
+    glViewport(0, 0, w, h);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    gluPerspective(30, (double)w / h, 1.0, 50.0);
 }
 
 void update(int timer_id)
