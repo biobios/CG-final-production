@@ -231,7 +231,7 @@ public:
         normals[last_x][last_y][0] *= (points[last_x][last_y]->height - points[last_x - 1][last_y]->height) * 2;
         normals[last_x][last_y][2] *= (points[last_x][last_y - 1]->height - points[last_x][last_y]->height) * 2;
 
-        // ê≥ãKâª
+        // ÔøΩÔøΩÔøΩKÔøΩÔøΩ
 
         for (size_t i = 0; i < points.size(); i++) {
             for (size_t j = 0; j < points[0].size(); j++) {
@@ -242,6 +242,16 @@ public:
 			}
 		}
         
+        // „Çπ„Éö„Ç≠„É•„É©„Éº„ÅÆË®àÁÆó
+        std::vector<std::vector<float>> speculars(points.size(), std::vector<float>(points[0].size(), 0));
+
+        for (size_t i = 0; i < points.size(); i++)
+        {
+            for (size_t j = 0; j < points[0].size(); j++)
+            {
+                speculars[i][j] = env->calcFresnelReflectance(0.2, normals[i][j]);
+            }
+        }
 
         double center_x = (points.size() - 1) / 2.0;
         double center_z = (points[0].size() - 1) / 2.0;
@@ -254,16 +264,18 @@ public:
 
         float F;
 
-        for (size_t j = 0; j < points[0].size() - 1; j++) {
+        for (size_t j = 0; j < points[0].size() - 1; j++)
+        {
             glBegin(GL_TRIANGLE_STRIP);
-            for (size_t i = 0; i < points.size(); i++) {
+            for (size_t i = 0; i < points.size(); i++)
+            {
                 glNormal3d(normals[i][j][0], normals[i][j][1], normals[i][j][2]);
-                F = env->calcFresnelReflectance(0.2, normals[i][j]);
+                F = speculars[i][j];
                 glColor4f(F, F, F, 1);
                 glVertex3d((i - center_x), points[i][j]->height * gain, (j - center_z));
 
 				glNormal3d(normals[i][j + 1][0], normals[i][j + 1][1], normals[i][j + 1][2]);
-                F = env->calcFresnelReflectance(0.2, normals[i][j + 1]);
+                F = speculars[i][j + 1];
                 glColor4f(F, F, F, 1);
                 glVertex3d((i - center_x), points[i][j + 1]->height * gain, (j + 1 - center_z));
             }
@@ -399,7 +411,7 @@ int main(int argc, char** argv)
     glutInitWindowPosition(0, 0);
     glutInitWindowSize(800, 800);
     glutInitDisplayMode(GLUT_RGBA | GLUT_DEPTH | GLUT_ALPHA);
-    glutCreateWindow("ìd20-0070 è¨ñxê≥é˜");
+    glutCreateWindow("ÔøΩd20-0070 ÔøΩÔøΩÔøΩxÔøΩÔøΩÔøΩÔøΩ");
     glClearColor(0.0, 0.0, 0.0, 1.0);
 
     //glMatrixMode(GL_PROJECTION);
@@ -441,7 +453,7 @@ void display()
 
 	glMatrixMode(GL_MODELVIEW);
 
-    // îwåi
+    // ÔøΩwÔøΩi
     glMaterialfv(GL_FRONT, GL_DIFFUSE, Params(white).maltiply(0.5));
     glMaterialfv(GL_FRONT, GL_SPECULAR, black);
     glMaterialfv(GL_FRONT, GL_AMBIENT, black);
@@ -562,30 +574,30 @@ void key(unsigned char key, int x, int y)
 
     if (key == 'w')
     {
-        // éãì_Çè„Ç…à⁄ìÆ
+        // ÔøΩÔøΩÔøΩ_ÔøΩÔøΩÔøΩÔøΩ…à⁄ìÔøΩ
         angle_xz += 0.1;
 	    change_angle = true;
     }
     if (key == 's')
     {
-		// éãì_Çâ∫Ç…à⁄ìÆ
+		// ÔøΩÔøΩÔøΩ_ÔøΩÔøΩÔøΩÔøΩÔøΩ…à⁄ìÔøΩ
 		angle_xz -= 0.1;
         change_angle = true;
     }
     if (key == 'a')
     {
-        // éãì_Çç∂Ç…à⁄ìÆ
+        // ÔøΩÔøΩÔøΩ_ÔøΩÔøΩÔøΩÔøΩÔøΩ…à⁄ìÔøΩ
         angle_y -= 0.1;
         change_angle = true;
     }
     if (key == 'd')
     {
-		// éãì_ÇâEÇ…à⁄ìÆ
+		// ÔøΩÔøΩÔøΩ_ÔøΩÔøΩÔøΩEÔøΩ…à⁄ìÔøΩ
 		angle_y += 0.1;
         change_angle = true;
 	}
 
-    // angleÇêßå¿
+    // angleÔøΩêßåÔøΩ
     if(angle_xz > 3.141592 / 2)
 	{
         angle_xz = 3.141592 / 2;
@@ -595,7 +607,7 @@ void key(unsigned char key, int x, int y)
 		angle_xz = -3.141592 / 2;
 	}
 
-    // angle_yÇ0Ç©ÇÁ2ÉŒÇÃîÕàÕÇ…é˚ÇﬂÇÈ
+    // angle_yÔøΩÔøΩ0ÔøΩÔøΩÔøΩÔøΩ2ÔøΩŒÇÃîÕàÕÇ…éÔøΩÔøΩﬂÇÔøΩ
     if (angle_y > 2 * 3.141592)
     {
         angle_y -= 2 * 3.141592;
