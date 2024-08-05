@@ -19,28 +19,34 @@ constexpr double PI = 3.1415926535;
 std::mt19937 *random_engine = nullptr;
 std::uniform_real_distribution<double> random_dist(0, 1);
 
+// Environment
+// 視点の位置、光源の位置、光源の色を管理するクラス
 class Environment
 {
     std::array<double, 3> eye;
     std::array<double, 3> center;
     std::array<double, 3> up;
 
-    std::array<double, 3> H;
-
     std::array<double, 3> light_position;
     std::array<float, 4> light_color;
-    void calcH();
 
 public:
     Environment();
+    // 視点の位置、注視点の位置、上方向のベクトルを設定する
     void lookAt(std::array<double, 3> const &eye, std::array<double, 3> const &center, std::array<double, 3> const &up);
+    // 光源の位置を設定する
     void setLightPosition(std::array<double, 3> const &light_position);
+    // 光源の色を設定する
     void setLightColor(std::array<float, 4> const &light_color);
-    void calcSpecular(std::array<float, 4> const &material, std::array<double, 3> const &normal, double smoothness, std::array<float, 4> &output_specular);
+    // 環境を適用する
     void apply();
+    // Fresnel反射率を計算する
     float calcFresnelReflectance(double c_spec, std::array<double, 3> const &normal);
 };
 
+// Transition
+// 環境の遷移を管理するクラス
+// 管理する対象には雨の落ちる頻度を含む
 class Transition
 {
     std::array<double, 3> next_light_position;
@@ -80,28 +86,32 @@ public:
         }
 
         // radをπ/8から2π/6の間でランダムに決定する
+        // それをもとに, y座標とz座標を決定する
         random_value = random_dist(*random_engine);
         double rad = PI / 8 * (1 - random_value) + 2 * PI / 6 * random_value;
 
         this->next_light_position[1] = sin(rad);
         this->next_light_position[2] = -cos(rad);
+
         // radを-π/12からπ/12の間でランダムに決定する
+        // それをもとに, x座標を決定する
         random_value = random_dist(*random_engine);
         rad = -PI / 12 * (1 - random_value) + PI / 12 * random_value;
         this->next_light_position[0] = sin(rad);
 
-        // 1分から5分の間でランダムに決定する
+        // 1分から3分の間で遷移にかかる時間をランダムに決定する
         random_value = random_dist(*random_engine);
-        //        this->transition_time_ms = 60000 * (1 - random_value) + 300000 * random_value;
-        this->transition_time_ms = 15000;
-
+        this->transition_time_ms = 60000 * (1 - random_value) + 180000 * random_value;
+        
         // raindrops_per_secondを2から10の間でランダムに決定する
         random_value = random_dist(*random_engine);
         this->next_raindrops_per_second = 2 * (1 - random_value) + 10 * random_value;
     }
 
+    // 現在の光源の位置、光源の色を環境に適用する
     void applyEnvironment(Environment *env)
     {
+        // 経過時間に応じて光源の位置、光源の色を変化させる
         std::array<double, 3> current_light_position;
         std::array<float, 4> current_light_color;
 
@@ -120,38 +130,76 @@ public:
         env->setLightColor(current_light_color);
     }
 
+    // 経過時間を更新する
     void update(uint64_t dt)
     {
         current_time += dt;
+        if (current_time > transition_time_ms)
+        {
+			current_time = transition_time_ms;
+		}
     }
 
+    // 次の雨粒が落ちるまでの時間を取得する
     uint64_t getTimeUntilNextRaindrop() const
     {
+        // 経過時間に応じて雨粒の落ちる頻度を変化させる
         double current_raindrops_per_second = prev_raindrops_per_second * (1 - (double)current_time / transition_time_ms) + next_raindrops_per_second * (double)current_time / transition_time_ms;
+        
+        // 指数分布に従って次の雨粒が落ちるまでの時間をランダムに決定する
         std::exponential_distribution<double> dist(current_raindrops_per_second);
         return dist(*random_engine) * 1000;
     }
 
+    // 遷移が終了したかどうかを判定する
     bool isFinished() const
     {
         return current_time >= transition_time_ms;
     }
 
+    // 次の遷移を生成する
     Transition *createNextTransition()
     {
-        return new Transition(next_light_position, next_light_color, next_raindrops_per_second);
+        // 現在の遷移が修了していたら、終了時の状態から次の遷移を生成する
+        if(isFinished())
+            return new Transition(next_light_position, next_light_color, next_raindrops_per_second);
+
+        // 現在の遷移が修了していない場合は、現在の状態から次の遷移を生成する
+        std::array<double, 3> current_light_position;
+        std::array<float, 4> current_light_color;
+
+        double transition_ratio = (double)current_time / transition_time_ms;
+
+        current_light_position[0] = prev_light_position[0] * (1 - transition_ratio) + next_light_position[0] * transition_ratio;
+        current_light_position[1] = prev_light_position[1] * (1 - transition_ratio) + next_light_position[1] * transition_ratio;
+        current_light_position[2] = prev_light_position[2] * (1 - transition_ratio) + next_light_position[2] * transition_ratio;
+
+        current_light_color[0] = prev_light_color[0] * (1 - transition_ratio) + next_light_color[0] * transition_ratio;
+        current_light_color[1] = prev_light_color[1] * (1 - transition_ratio) + next_light_color[1] * transition_ratio;
+        current_light_color[2] = prev_light_color[2] * (1 - transition_ratio) + next_light_color[2] * transition_ratio;
+        current_light_color[3] = 1.0;
+
+        double current_raindrops_per_second = prev_raindrops_per_second * (1 - (double)current_time / transition_time_ms) + next_raindrops_per_second * (double)current_time / transition_time_ms;
+
+        return new Transition(current_light_position, current_light_color, current_raindrops_per_second);
+
     }
 };
 
-Environment *env;
+Environment *env = nullptr;
 Transition *transition = nullptr;
 
+// MassPoint
+// 質点の位置、速度を管理するクラス
 class MassPoint
 {
 public:
     double height;
     double velocity;
-    static constexpr double RESISTANCE = 0.15;
+
+    // 速度に比例する抵抗係数
+    static constexpr double RESISTANCE = 0.1;
+    // 原点を基準としたばね定数
     static constexpr double GRAVITY = 0.01;
 
 public:
@@ -166,6 +214,7 @@ public:
         velocity += v;
     }
 
+    // 質点の位置、速度を更新する
     void update(double dv, double dt)
     {
         velocity += dv - velocity * RESISTANCE * dt;
@@ -174,6 +223,8 @@ public:
     }
 };
 
+// Params
+// パラメータを管理する構造体
 struct Params
 {
     std::array<float, 4> p;
@@ -193,6 +244,7 @@ struct Params
         }
     }
 
+    // 0~2番目の要素にaを掛ける
     Params &maltiply(float a)
     {
         for (int i = 0; i < 3; i++)
@@ -202,15 +254,21 @@ struct Params
         return *this;
     }
 
+    // 3番目の要素にaを代入する
     Params &alpha(float a)
     {
         p[3] = a;
         return *this;
     }
+
+    // ポインタへの変換関数
     operator float *() { return p.data(); }
+    // arrayへの変換関数
     operator std::array<float, 4> &() { return p; }
 };
 
+// Material
+// マテリアルを管理する構造体
 struct Material
 {
     Params ambient;
@@ -219,6 +277,7 @@ struct Material
     float shininess;
     Material() = default;
     Material(Params const &a, Params const &d, Params const &s, float sh) : ambient(a), diffuse(d), specular(s), shininess(sh) {}
+    // マテリアルを適用する
     void apply()
     {
         glMaterialfv(GL_FRONT, GL_AMBIENT, ambient);
@@ -228,21 +287,8 @@ struct Material
     }
 };
 
-inline float schlick(double c_spec, std::array<double, 3> const &L, std::array<double, 3> const &N)
-{
-    double c = L[0] * N[0] + L[1] * N[1] + L[2] * N[2];
-
-    return c_spec + (1 - c_spec) * pow(1 - c, 5);
-}
-
-inline float scaled_sigmoide(double x, double gain, double mid)
-{
-    float min = 1 / (1 + exp(-gain * (-mid)));
-    float max = 1 / (1 + exp(-gain * (1 - mid)));
-
-    return (1 / (1 + exp(-gain * (x - mid))) - min) / (max - min);
-}
-
+// WaterSurface
+// 水面を管理するクラス
 class WaterSurface
 {
     std::vector<std::vector<MassPoint *>> points;
@@ -254,6 +300,7 @@ public:
 
     WaterSurface(uint64_t n, uint64_t m, double t, double s = 0.02) : tension(t), specular(s)
     {
+        // n*mの質点を生成する
         points.resize(n);
         for (uint64_t i = 0; i < n; i++)
         {
@@ -265,20 +312,25 @@ public:
         }
     }
 
+    // 質点に力を加える
     void addForce(uint64_t i, uint64_t j, double f)
     {
         points[i][j]->addVelocity(f);
     }
 
+    // 質点の高さを設定する
     void setHeight(uint64_t i, uint64_t j, double h)
     {
         points[i][j]->height = h;
     }
 
+    // dt秒後の状態に更新する
     void update(double dt)
     {
+        // 各質点について、隣接する質点とのy座標の差の和を計算する
         std::vector<std::vector<double>> force(points.size(), std::vector<double>(points[0].size(), 0));
 
+        // x方向の隣接する質点とのy座標の差の和を計算する
         for (size_t i = 0; i < points.size() - 1; i++)
         {
             for (size_t j = 0; j < points[0].size(); j++)
@@ -291,6 +343,7 @@ public:
             }
         }
 
+        // y方向の隣接する質点とのy座標の差の和を計算する
         for (size_t i = 0; i < points.size(); i++)
         {
             for (size_t j = 0; j < points[0].size() - 1; j++)
@@ -303,6 +356,7 @@ public:
             }
         }
 
+        // 質点の位置を更新する
         for (size_t i = 0; i < points.size(); i++)
         {
             for (size_t j = 0; j < points[0].size(); j++)
@@ -316,9 +370,18 @@ public:
 
     void draw(float gain = 1.0f)
     {
-
+        // 法線ベクトルの計算
+        // 質点の位置関係を上から見て次のように表す
+        //   2
+        // 3 0 1
+        //   4
+        // この時、質点0の法線ベクトルを、
+        // (1 - 3) × (2 - 4)
+        // として計算すると
+        // n = (y3 - y1, 2, y2 - y4)となる
         std::vector<std::vector<std::array<double, 3>>> normals(points.size(), std::vector<std::array<double, 3>>(points[0].size(), {gain, NORMAL_Y, gain}));
 
+        // 端を除いた部分(全方向に隣が存在する部分)の法線ベクトルを計算する
         for (size_t i = 1; i < points.size() - 1; i++)
         {
             for (size_t j = 1; j < points[0].size() - 1; j++)
@@ -331,6 +394,7 @@ public:
         size_t last_x = points.size() - 1;
         size_t last_y = points[0].size() - 1;
 
+        // 角を除く左右の端の法線ベクトルを計算する
         for (size_t i = 1; i < points.size() - 1; i++)
         {
             normals[i][0][0] *= points[i + 1][0]->height - points[i - 1][0]->height;
@@ -340,6 +404,7 @@ public:
             normals[i][last_y][2] *= (points[i][last_y - 1]->height - points[i][last_y]->height) * 2;
         }
 
+        // 角を除く上下の端の法線ベクトルを計算する
         for (size_t i = 1; i < points[0].size() - 1; i++)
         {
             normals[0][i][0] *= (points[1][i]->height - points[0][i]->height) * 2;
@@ -349,6 +414,7 @@ public:
             normals[last_x][i][2] *= points[last_x][i - 1]->height - points[last_x][i + 1]->height;
         }
 
+        // 角の法線ベクトルを計算する
         normals[0][0][0] *= (points[1][0]->height - points[0][0]->height) * 2;
         normals[0][0][2] *= (points[0][0]->height - points[0][1]->height) * 2;
 
@@ -361,8 +427,7 @@ public:
         normals[last_x][last_y][0] *= (points[last_x][last_y]->height - points[last_x - 1][last_y]->height) * 2;
         normals[last_x][last_y][2] *= (points[last_x][last_y - 1]->height - points[last_x][last_y]->height) * 2;
 
-        // 正規化
-
+        // 法線ベクトルを正規化する
         for (size_t i = 0; i < points.size(); i++)
         {
             for (size_t j = 0; j < points[0].size(); j++)
@@ -374,7 +439,7 @@ public:
             }
         }
 
-        // スペキュラーの計算
+        // 法線ベクトルからFresnel反射率を計算する
         std::vector<std::vector<float>> speculars(points.size(), std::vector<float>(points[0].size(), 0));
 
         for (size_t i = 0; i < points.size(); i++)
@@ -385,17 +450,21 @@ public:
             }
         }
 
+        // 中央が0,0になるように描画する
         double center_x = (points.size() - 1) / 2.0;
         double center_z = (points[0].size() - 1) / 2.0;
 
         material.apply();
 
+        // glColor4fで指定した色を反射率として使用するように設定する
         glEnable(GL_COLOR_MATERIAL);
-        glEnable(GL_NORMALIZE);
         glColorMaterial(GL_FRONT, GL_SPECULAR);
 
-        float F;
+        // 法線ベクトルの正規化を有効にする(scaleの影響を受けないようにする)
+        glEnable(GL_NORMALIZE);
 
+        // 水面を描画する
+        float F;
         for (size_t j = 0; j < points[0].size() - 1; j++)
         {
             glBegin(GL_TRIANGLE_STRIP);
@@ -414,29 +483,13 @@ public:
             glEnd();
         }
 
+        // 各種設定を元に戻す
         glDisable(GL_COLOR_MATERIAL);
         glDisable(GL_NORMALIZE);
     }
 };
 
-// Environment(private)
-
-void Environment::calcH()
-{
-    double ray[3] = {center[0] - eye[0], center[1] - eye[1], center[2] - eye[2]};
-    double len = sqrt(ray[0] * ray[0] + ray[1] * ray[1] + ray[2] * ray[2]);
-    ray[0] /= len;
-    ray[1] /= len;
-    ray[2] /= len;
-
-    H = {light_position[0] - ray[0], light_position[1] - ray[1], light_position[2] - ray[2]};
-    len = sqrt(H[0] * H[0] + H[1] * H[1] + H[2] * H[2]);
-    H[0] /= len;
-    H[1] /= len;
-    H[2] /= len;
-}
-
-// Environment
+// Environment 実装
 
 Environment::Environment()
 {
@@ -445,7 +498,6 @@ Environment::Environment()
     up = {0, 1, 0};
     light_position = {0, 1, 0};
     light_color = {1, 1, 1, 1};
-    calcH();
 }
 
 void Environment::lookAt(std::array<double, 3> const &eye, std::array<double, 3> const &center, std::array<double, 3> const &up)
@@ -453,20 +505,17 @@ void Environment::lookAt(std::array<double, 3> const &eye, std::array<double, 3>
     this->eye = eye;
     this->center = center;
     this->up = up;
-
-    calcH();
 }
 
 void Environment::setLightPosition(std::array<double, 3> const &light_position)
 {
     this->light_position = light_position;
 
+    // 光源の位置を正規化する
     double len = sqrt(light_position[0] * light_position[0] + light_position[1] * light_position[1] + light_position[2] * light_position[2]);
     this->light_position[0] /= len;
     this->light_position[1] /= len;
     this->light_position[2] /= len;
-
-    calcH();
 }
 
 void Environment::setLightColor(std::array<float, 4> const &light_color)
@@ -474,40 +523,21 @@ void Environment::setLightColor(std::array<float, 4> const &light_color)
     this->light_color = light_color;
 }
 
-void Environment::calcSpecular(std::array<float, 4> const &material, std::array<double, 3> const &normal, double smoothness, std::array<float, 4> &output_specular)
-{
-    double c_spec = 0.2;
-    double c = light_position[0] * normal[0] + light_position[1] * normal[1] + light_position[2] * normal[2];
-
-    double F_schlick;
-    if (c >= 0)
-        F_schlick = c_spec + (1 - c_spec) * pow(1 - c, 5);
-    else
-        F_schlick = c_spec + (1 - c_spec) * pow(1 + c, 5);
-    double angle_H = acos(H[0] * normal[0] + H[1] * normal[1] + H[2] * normal[2]);
-    angle_H /= smoothness;
-    double k_spec = exp(-angle_H * angle_H);
-
-    output_specular[0] = material[0] * light_color[0] * F_schlick * k_spec;
-    output_specular[1] = material[1] * light_color[1] * F_schlick * k_spec;
-    output_specular[2] = material[2] * light_color[2] * F_schlick * k_spec;
-    output_specular[3] = material[3] * light_color[3] * F_schlick * k_spec;
-    //    output_specular[3] = scaled_sigmoide(output_specular[3], 100, 0.55);
-}
-
 float Environment::calcFresnelReflectance(double c_spec, std::array<double, 3> const &normal)
 {
+    // 光源の位置と法線ベクトルの内積を計算する
     double c = light_position[0] * normal[0] + light_position[1] * normal[1] + light_position[2] * normal[2];
 
+    // Fresnel反射率を計算する
     if (c >= 0)
         return c_spec + (1 - c_spec) * pow(1 - c, 5);
     else
         return c_spec + (1 - c_spec) * pow(1 + c, 5);
 }
 
+// 環境を適用する
 void Environment::apply()
 {
-
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
     gluLookAt(eye[0], eye[1], eye[2], center[0], center[1], center[2], up[0], up[1], up[2]);
@@ -524,8 +554,6 @@ void key(unsigned char key, int x, int y);
 void update(int timer_id);
 void drawWaterSurface(int timer_id);
 void rain(int timer_id);
-void changeLightPosition(int timer_id);
-void changeEyePosition(int timer_id);
 void reshapeWindow(int w, int h);
 
 WaterSurface *waterSurface;
@@ -534,9 +562,11 @@ int main(int argc, char **argv)
 {
     glutInit(&argc, argv);
 
+    // 水面の初期化
     waterSurface = new WaterSurface(100, 100, 0.06);
     waterSurface->material = Material(Params(black), Params(white).maltiply(0.01f), Params(white), 128);
 
+    // 環境の初期化
     env = new Environment();
 
     // 乱数生成器の初期化
@@ -559,6 +589,7 @@ int main(int argc, char **argv)
     glLoadIdentity();
     gluPerspective(45, (double)init_width / init_height, 1.0, 50.0);
 
+    // 視点の設定
     const double r = 16;
     std::array<double, 3> eye = {};
     eye[0] = 0;
@@ -568,16 +599,19 @@ int main(int argc, char **argv)
     eye[0] *= r;
     eye[1] *= r;
     eye[2] *= r;
-
     env->lookAt(eye, {0, 0, 0}, {0, 1, 0});
 
-    glShadeModel(GL_SMOOTH);
+    // アルファブレンドの設定
     glBlendFunc(GL_ONE, GL_ONE);
     glEnable(GL_BLEND);
+
+    // ライティングの設定
+    glShadeModel(GL_SMOOTH);
     glEnable(GL_LIGHT0);
     glEnable(GL_LIGHTING);
     glEnable(GL_DEPTH_TEST);
 
+    // ライトの設定
     env->setLightPosition({0, 1, -6});
     env->setLightColor({1, 0.5, 0.5, 1});
 
@@ -594,17 +628,17 @@ int main(int argc, char **argv)
     return 0;
 }
 
+// ディスプレイハンドラ
 void display()
 {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     env->apply();
-
     glMatrixMode(GL_MODELVIEW);
 
     glTranslated(0, 0, -4);
 
-    // 背景
+    // 背景の描画
     glMaterialfv(GL_FRONT, GL_DIFFUSE, Params(white).maltiply(0.5));
     glMaterialfv(GL_FRONT, GL_SPECULAR, black);
     glMaterialfv(GL_FRONT, GL_AMBIENT, Params(white).maltiply(0.3));
@@ -681,6 +715,7 @@ void display()
     glFlush();
 }
 
+// アニメーションが行われるように一定周期で呼び出される関数
 void drawWaterSurface(int timer_id)
 {
     if (timer_id != 1)
@@ -688,9 +723,11 @@ void drawWaterSurface(int timer_id)
         return;
     }
 
+    // 遷移に経過時間を適用する
     transition->update(1000 / FRAMES_PER_SECOND);
     transition->applyEnvironment(env);
 
+    // 遷移が終了したら次の遷移を生成する
     if (transition->isFinished())
     {
         Transition *next_transition = transition->createNextTransition();
@@ -698,18 +735,22 @@ void drawWaterSurface(int timer_id)
         transition = next_transition;
     }
 
+    // レンダリング
     glutPostRedisplay();
     glutTimerFunc(1000 / FRAMES_PER_SECOND, drawWaterSurface, 1);
 }
 
+// ウィンドウサイズが変更されたときに呼び出される関数
 void reshapeWindow(int w, int h)
 {
+    // 表示がゆがまないように設定する
     glViewport(0, 0, w, h);
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
     gluPerspective(30, (double)w / h, 1.0, 50.0);
 }
 
+// シミュレーションが行われるように一定周期で呼び出される関数
 void update(int timer_id)
 {
     if (timer_id != 0)
@@ -724,6 +765,7 @@ void update(int timer_id)
     glutTimerFunc(4, update, 0);
 }
 
+// 雨粒が落ちるように不定期で呼び出される関数
 void rain(int timer_id)
 {
     if (timer_id != 2)
@@ -731,20 +773,12 @@ void rain(int timer_id)
         return;
     }
 
+    // 雨粒の落下サイズ 2r * 2r
     const int64_t r = 2;
 
+    // 位置をランダムに決定
     uint64_t x = rand() % (100 - r * 2) + r;
     uint64_t y = rand() % (100 - r * 2) + r;
-
-    // waterSurface->addForce(x, y, -1);
-    // waterSurface->addForce(x + 2, y, 0.1);
-    // waterSurface->addForce(x - 2, y, 0.1);
-    // waterSurface->addForce(x, y + 2, 0.1);
-    // waterSurface->addForce(x, y - 2, 0.1);
-    // waterSurface->addForce(x + 1, y + 1, 0.1);
-    // waterSurface->addForce(x - 1, y - 1, 0.1);
-    // waterSurface->addForce(x + 1, y - 1, 0.1);
-    // waterSurface->addForce(x - 1, y + 1, 0.1);
 
     for (int i = -r; i <= r; i++)
     {
@@ -752,157 +786,29 @@ void rain(int timer_id)
         {
             if (i * i + j * j <= r * r)
             {
+                // 中心からの距離に応じて力を加える
                 waterSurface->addForce(x + i, y + j, -1 * exp(-(i * i + j * j) / 4.0));
-                // waterSurface->addForce(x + i, y + j, 0.1 / r * (i * i + j * j) - 0.05 / r);
             }
         }
     }
 
-    // waterSurface->addForce(rand() % 100, rand() % 100, -2);
-
+    // 次の雨粒が落ちるまでの時間を取得して、その時間後に再度この関数を呼び出す
     glutTimerFunc(transition->getTimeUntilNextRaindrop(), rain, 2);
 }
 
-bool change = false;
-bool changeEye = false;
-
-double angle_y = 0;
-double angle_xz = 3.1415926535 / 4;
-
 void key(unsigned char key, int x, int y)
 {
+    // スペースキーを押すと遷移の終了を待たずに次の遷移に移る
     if (key == ' ')
     {
-        change = !change;
-        if (change)
-        {
-            glutTimerFunc(50, changeLightPosition, 3);
-        }
+        Transition *next_transition = transition->createNextTransition();
+        delete transition;
+        transition = next_transition;
     }
-    //   if (key == 'e')
-    //   {
-    //	changeEye = !changeEye;
-    //       if (changeEye)
-    //       {
-    //		glutTimerFunc(50, changeEyePosition, 4);
-    //	}
-    //}
 
-    bool change_angle = false;
-
-    if (key == 'w')
+    // qキーを押すとプログラムを終了する
+    if (key == 'q')
     {
-        // 視点を上に移動
-        angle_xz += 0.1;
-        change_angle = true;
-    }
-    if (key == 's')
-    {
-        // 視点を下に移動
-        angle_xz -= 0.1;
-        change_angle = true;
-    }
-    if (key == 'a')
-    {
-        // 視点を左に移動
-        angle_y -= 0.1;
-        change_angle = true;
-    }
-    if (key == 'd')
-    {
-        // 視点を右に移動
-        angle_y += 0.1;
-        change_angle = true;
-    }
-
-    // angleを制限
-    if (angle_xz > 3.141592 / 2)
-    {
-        angle_xz = 3.141592 / 2;
-    }
-    if (angle_xz < -3.141592 / 2)
-    {
-        angle_xz = -3.141592 / 2;
-    }
-
-    // angle_yを0から2πの範囲に収める
-    if (angle_y > 2 * 3.141592)
-    {
-        angle_y -= 2 * 3.141592;
-    }
-    if (angle_y < 0)
-    {
-        angle_y += 2 * 3.141592;
-    }
-
-    if (change_angle)
-    {
-        const double r = 18;
-        std::array<double, 3> eye = {};
-        eye[0] = sin(angle_y) * cos(angle_xz);
-        eye[1] = abs(sin(angle_xz));
-        eye[2] = cos(angle_y) * cos(angle_xz);
-
-        eye[0] *= r;
-        eye[1] *= r;
-        eye[2] *= r;
-
-        env->lookAt(eye, {0, 0, 0}, {0, 1, 0});
-    }
-}
-
-double count = 0;
-
-void changeLightPosition(int timer_id)
-{
-    if (timer_id != 3)
-    {
-        return;
-    }
-
-    count += 0.01;
-    if (count > 2 * 3.141592)
-    {
-        count = 0;
-    }
-
-    float light_position[] = {0, 1.0, 0, 0.0};
-    //	light_position[0] = sin(count);
-    light_position[1] = abs(cos(count));
-    light_position[2] = sin(count);
-
-    env->setLightPosition({light_position[0], light_position[1], light_position[2]});
-
-    if (change)
-        glutTimerFunc(50, changeLightPosition, 3);
-    else
-        std::cout << "y = " << light_position[1] << " z = " << light_position[2] << std::endl;
-}
-
-double angle = 0;
-
-void changeEyePosition(int timer_id)
-{
-    if (timer_id != 4)
-    {
-        return;
-    }
-
-    angle += 0.005;
-    if (angle > 2 * 3.141592)
-    {
-        angle = 0;
-    }
-
-    float eye_position[] = {0, 1.0, 0, 0.0};
-    eye_position[0] = 3 * sin(angle);
-    eye_position[1] = 9 * abs(cos(angle));
-    eye_position[2] = 3 * sin(angle * 2);
-
-    env->lookAt({eye_position[0], eye_position[1], eye_position[2]}, {0, 0, 0}, {0, 1, 0});
-
-    if (changeEye)
-        glutTimerFunc(50, changeEyePosition, 4);
-    else
-        std::cout << "x = " << eye_position[0] << " y = " << eye_position[1] << " z = " << eye_position[2] << std::endl;
+		exit(0);
+	}
 }
