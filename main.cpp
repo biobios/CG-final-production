@@ -5,6 +5,8 @@
 #include <cmath>
 #include <iostream>
 #include <random>
+#include <Windows.h>
+#include <mmsystem.h>
 
 constexpr float FRAMES_PER_SECOND = 20;
 
@@ -551,8 +553,11 @@ int main(int argc, char** argv)
     glEnable(GL_LIGHTING);
     glEnable(GL_DEPTH_TEST);
 
-    env->setLightPosition({ 0, 1, -6 });
-    env->setLightColor({ 1, 1, 1, 1 });
+    env->setLightPosition({0, 1, -6});
+    env->setLightColor({1, 0.5, 0.5, 1});
+
+    // 雨音ループ再生
+    PlaySound(TEXT("rain.wav"), NULL, SND_FILENAME | SND_ASYNC | SND_LOOP);
 
     glutDisplayFunc(display);
     glutKeyboardFunc(key);
