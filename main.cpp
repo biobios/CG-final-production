@@ -571,16 +571,68 @@ void display()
     // �w�i
     glMaterialfv(GL_FRONT, GL_DIFFUSE, Params(white).maltiply(0.5));
     glMaterialfv(GL_FRONT, GL_SPECULAR, black);
-    glMaterialfv(GL_FRONT, GL_AMBIENT, black);
+    glMaterialfv(GL_FRONT, GL_AMBIENT, Params(white).maltiply(0.3));
     glMaterialf(GL_FRONT, GL_SHININESS, 0);
+
+    const double outer_r = 30;
+    const double inner_r = 10;
+
+    // 底
     glBegin(GL_QUADS);
     glNormal3d(0, 1, 0);
-    glVertex3d(-10, -1, -10);
-    glVertex3d(-10, -1, 10);
-    glVertex3d(10, -1, 10);
-    glVertex3d(10, -1, -10);
+    glVertex3d(-inner_r, -1, -inner_r);
+    glVertex3d(-inner_r, -1, inner_r);
+    glVertex3d(inner_r, -1, inner_r);
+    glVertex3d(inner_r, -1, -inner_r);
     glEnd();
-
+    // 奥壁
+    glBegin(GL_QUADS);
+    glNormal3d(0, 0, 1);
+    glVertex3d(-inner_r, -1, -inner_r);
+    glVertex3d(inner_r, -1, -inner_r);
+    glVertex3d(inner_r, 0.2, -inner_r);
+    glVertex3d(-inner_r, 0.2, -inner_r);
+    glEnd();
+    // 左壁
+    glBegin(GL_QUADS);
+    glNormal3d(1, 0, 0);
+    glVertex3d(-inner_r, -1, -inner_r);
+    glVertex3d(-inner_r, -1, inner_r);
+    glVertex3d(-inner_r, 0.2, inner_r);
+    glVertex3d(-inner_r, 0.2, -inner_r);
+    glEnd();
+    // 右壁
+    glBegin(GL_QUADS);
+    glNormal3d(-1, 0, 0);
+    glVertex3d(inner_r, -1, -inner_r);
+    glVertex3d(inner_r, -1, inner_r);
+    glVertex3d(inner_r, 0.2, inner_r);
+    glVertex3d(inner_r, 0.2, -inner_r);
+    glEnd();
+    // 奥床
+    glBegin(GL_QUADS);
+    glNormal3d(0, 1, 0);
+    glVertex3d(-outer_r, 0.2, -inner_r);
+    glVertex3d(-outer_r, 0.2, -outer_r);
+    glVertex3d(outer_r, 0.2, -outer_r);
+    glVertex3d(outer_r, 0.2, -inner_r);
+    glEnd();
+    // 左床
+    glBegin(GL_QUADS);
+    glNormal3d(0, 1, 0);
+    glVertex3d(-outer_r, 0.2, -inner_r);
+    glVertex3d(-outer_r, 0.2, inner_r);
+    glVertex3d(-inner_r, 0.2, inner_r);
+    glVertex3d(-inner_r, 0.2, -inner_r);
+    glEnd();
+    // 右床
+    glBegin(GL_QUADS);
+    glNormal3d(0, 1, 0);
+    glVertex3d(outer_r, 0.2, -inner_r);
+    glVertex3d(outer_r, 0.2, inner_r);
+    glVertex3d(inner_r, 0.2, inner_r);
+    glVertex3d(inner_r, 0.2, -inner_r);
+    glEnd();
 
     if (waterSurface != nullptr)
     {
