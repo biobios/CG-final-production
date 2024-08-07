@@ -615,7 +615,7 @@ int main(int argc, char **argv)
     env->setLightColor({1, 0.5, 0.5, 1});
 
     // 雨音ループ再生
-    PlaySound(TEXT("rain.wav"), NULL, SND_FILENAME | SND_ASYNC | SND_LOOP);
+    PlaySound(TEXT("rain.wav"), NULL, SND_FILENAME | SND_ASYNC | SND_LOOP | SND_NODEFAULT);
 
     glutDisplayFunc(display);
     glutKeyboardFunc(key);
