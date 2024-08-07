@@ -215,9 +215,9 @@ public:
     }
 
     // 質点の位置、速度を更新する
-    void update(double dv, double dt)
+    void update(double f, double dt)
     {
-        velocity += dv - velocity * RESISTANCE * dt;
+        velocity += f * dt - velocity * RESISTANCE * dt;
         velocity -= height * GRAVITY * dt;
         height += velocity * dt;
     }
@@ -563,7 +563,7 @@ int main(int argc, char **argv)
     glutInit(&argc, argv);
 
     // 水面の初期化
-    waterSurface = new WaterSurface(100, 100, 0.06);
+    waterSurface = new WaterSurface(100, 100, 0.1);
     waterSurface->material = Material(Params(black), Params(white).maltiply(0.01f), Params(white), 128);
 
     // 環境の初期化
@@ -759,7 +759,7 @@ void update(int timer_id)
     }
     if (waterSurface != nullptr)
     {
-        waterSurface->update(0.4);
+        waterSurface->update(0.3);
     }
 
     glutTimerFunc(4, update, 0);
