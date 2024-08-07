@@ -102,7 +102,7 @@ public:
         // 1分から3分の間で遷移にかかる時間をランダムに決定する
         random_value = random_dist(*random_engine);
         this->transition_time_ms = 60000 * (1 - random_value) + 180000 * random_value;
-        
+
         // raindrops_per_secondを2から10の間でランダムに決定する
         random_value = random_dist(*random_engine);
         this->next_raindrops_per_second = 2 * (1 - random_value) + 10 * random_value;
@@ -136,8 +136,8 @@ public:
         current_time += dt;
         if (current_time > transition_time_ms)
         {
-			current_time = transition_time_ms;
-		}
+            current_time = transition_time_ms;
+        }
     }
 
     // 次の雨粒が落ちるまでの時間を取得する
@@ -145,7 +145,7 @@ public:
     {
         // 経過時間に応じて雨粒の落ちる頻度を変化させる
         double current_raindrops_per_second = prev_raindrops_per_second * (1 - (double)current_time / transition_time_ms) + next_raindrops_per_second * (double)current_time / transition_time_ms;
-        
+
         // 指数分布に従って次の雨粒が落ちるまでの時間をランダムに決定する
         std::exponential_distribution<double> dist(current_raindrops_per_second);
         return dist(*random_engine) * 1000;
@@ -161,7 +161,7 @@ public:
     Transition *createNextTransition()
     {
         // 現在の遷移が修了していたら、終了時の状態から次の遷移を生成する
-        if(isFinished())
+        if (isFinished())
             return new Transition(next_light_position, next_light_color, next_raindrops_per_second);
 
         // 現在の遷移が修了していない場合は、現在の状態から次の遷移を生成する
@@ -182,7 +182,6 @@ public:
         double current_raindrops_per_second = prev_raindrops_per_second * (1 - (double)current_time / transition_time_ms) + next_raindrops_per_second * (double)current_time / transition_time_ms;
 
         return new Transition(current_light_position, current_light_color, current_raindrops_per_second);
-
     }
 };
 
@@ -808,6 +807,6 @@ void key(unsigned char key, int x, int y)
     // qキーを押すとプログラムを終了する
     if (key == 'q')
     {
-		exit(0);
-	}
+        exit(0);
+    }
 }
