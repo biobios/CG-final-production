@@ -293,12 +293,11 @@ class WaterSurface
 {
     std::vector<std::vector<MassPoint *>> points;
     double tension;
-    double specular;
 
 public:
     Material material = {};
 
-    WaterSurface(uint64_t n, uint64_t m, double t, double s = 0.02) : tension(t), specular(s)
+    WaterSurface(uint64_t n, uint64_t m, double t) : tension(t)
     {
         // n*mの質点を生成する
         points.resize(n);
